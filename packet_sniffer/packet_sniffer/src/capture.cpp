@@ -1,14 +1,10 @@
-/*
- * capture.cpp
- * Packet capture thread using Npcap/WinPcap API.
- * Parses Ethernet -> IP -> TCP/UDP/ICMP headers.
- */
+
 
 #include "../include/sniffer.h"
 
-// -----------------------------------------------------------------------
+
 // apply_filter: returns true if the record passes the active filter
-// -----------------------------------------------------------------------
+
 bool apply_filter(const packet_record_t *rec, const filter_t *f)
 {
     if (!f->active)
@@ -37,9 +33,9 @@ bool apply_filter(const packet_record_t *rec, const filter_t *f)
     return true;
 }
 
-// -----------------------------------------------------------------------
+
 // ip_to_str: converts a 32-bit network-order IP to dotted-decimal string
-// -----------------------------------------------------------------------
+
 static void ip_to_str(uint32_t ip_net, char *buf)
 {
     struct in_addr addr;
@@ -48,9 +44,9 @@ static void ip_to_str(uint32_t ip_net, char *buf)
     buf[INET_ADDRSTRLEN - 1] = '\0';
 }
 
-// -----------------------------------------------------------------------
+
 // packet_handler: called by pcap_loop for every captured frame
-// -----------------------------------------------------------------------
+
 void packet_handler(u_char *param,
                     const struct pcap_pkthdr *header,
                     const u_char *pkt_data)
@@ -163,9 +159,9 @@ void packet_handler(u_char *param,
     LeaveCriticalSection(&state->lock);
 }
 
-// -----------------------------------------------------------------------
+
 // capture_thread: entry point for the background capture thread
-// -----------------------------------------------------------------------
+
 DWORD WINAPI capture_thread(LPVOID arg)
 {
     sniffer_state_t *state = (sniffer_state_t *)arg;
