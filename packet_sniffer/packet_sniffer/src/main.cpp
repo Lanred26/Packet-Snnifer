@@ -1,9 +1,7 @@
 
 #include "../include/sniffer.h"
 
-// -----------------------------------------------------------------------
-// Lanza un nuevo hilo de captura. Cierra el anterior si existe.
-// -----------------------------------------------------------------------
+
 static HANDLE launch_capture(sniffer_state_t *state, HANDLE prev_thread,
                               const char *dev_name, char *errbuf)
 {
