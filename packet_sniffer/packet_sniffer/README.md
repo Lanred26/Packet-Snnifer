@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # Packet Sniffer - Redes I
 
 Herramienta de captura y analisis de trafico de red en C++ con Npcap (Windows).
@@ -41,6 +40,3 @@ Ejecutar `sniffer.exe` como Administrador.
 - Seleccion de interfaz de red al inicio
 - Inicio/pausa de captura desde la UI
 - Limpieza del buffer desde la UI
-=======
-# Packet-Snnifer
->>>>>>> 4a174ee5d115d3cdceef5f6647f680608063ad99

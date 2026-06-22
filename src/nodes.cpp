@@ -4,14 +4,6 @@
  *   - Area 4 (lista de dispositivos con nombre resuelto)
  *   - Panel de estadisticas Top Talkers (tecla T)
  *
- * Resolucion de nombre en dos pasos:
- *   1. Si la IP es de LAN local (RFC1918), intenta NetBIOS Name Query
- *      (UDP 137) primero, porque routers/PCs Windows en LAN casi
- *      siempre responden a esto aunque no tengan PTR en DNS.
- *   2. Si NetBIOS no responde o la IP no es LAN, intenta DNS inverso
- *      via gethostbyaddr (funciona bien para dominios publicos:
- *      Akamai, Google, GitHub, etc.)
- *
  * Todo ocurre en un hilo separado por IP, fire-and-forget, para no
  * bloquear la captura ni la UI. resolve_attempted/resolve_pending
  * garantizan un solo intento por IP en toda la ejecucion.
@@ -23,10 +15,9 @@
 
 #include "../include/sniffer.h"
 
-// -----------------------------------------------------------------------
 // Busca un nodo existente por IP, o crea uno nuevo si hay espacio.
 // Debe llamarse con node_lock ya tomado.
-// -----------------------------------------------------------------------
+
 static node_info_t *find_or_create_node(sniffer_state_t *state, const char *ip)
 {
     for (int i = 0; i < state->node_count; i++)
@@ -56,10 +47,10 @@ void node_track(sniffer_state_t *state, const char *ip, uint16_t bytes, bool is_
     LeaveCriticalSection(&state->node_lock);
 }
 
-// -----------------------------------------------------------------------
+
 // Detecta si una IPv4 (en host order) pertenece a un rango RFC1918
 // (LAN privada): 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16
-// -----------------------------------------------------------------------
+
 static bool is_private_lan(uint32_t ip_host_order)
 {
     uint8_t b0 = (ip_host_order >> 24) & 0xFF;
@@ -71,23 +62,15 @@ static bool is_private_lan(uint32_t ip_host_order)
     return false;
 }
 
-// -----------------------------------------------------------------------
-// NetBIOS Name Query (UDP/137) - consulta directa al estilo "nbtstat -A"
-// sin usar la API NCB (que requiere el driver NetBT cargado de forma
-// especial); se arma el paquete UDP a mano, mas portable entre
-// versiones de MinGW.
-//
-// Devuelve true si obtuvo un nombre, lo copia en out_name.
-// -----------------------------------------------------------------------
+
+
+
 static bool netbios_query(const char *ip, char *out_name, size_t out_len)
 {
     SOCKET sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     if (sock == INVALID_SOCKET) return false;
 
     // Timeout corto: 600ms. LAN local responde casi instantaneo si
-    // el host existe y tiene NetBIOS habilitado; si no, no vale la
-    // pena esperar mas porque bloqueamos un hilo dedicado de todos
-    // modos (no la UI ni la captura).
     DWORD timeout = 600;
     setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (const char *)&timeout, sizeof(timeout));
 
@@ -97,15 +80,14 @@ static bool netbios_query(const char *ip, char *out_name, size_t out_len)
     dest.sin_port   = htons(137);
     dest.sin_addr.s_addr = inet_addr(ip);
 
-    // Paquete NBSTAT query estandar (NBTSTAT -A equivalente)
+    // Paquete NBSTAT 
     unsigned char query[50] = {
         0xA2, 0x41,             // Transaction ID
         0x00, 0x00,             // Flags (consulta estandar, no recursiva)
         0x00, 0x01,             // Questions: 1
         0x00, 0x00,             // Answer RRs: 0
-        0x00, 0x00,             // Authority RRs: 0
-        0x00, 0x00,             // Additional RRs: 0
-        // Nombre NetBIOS codificado: "*" + padding = wildcard query
+        0x00, 0x00,             
+        0x00, 0x00,             
         0x20,
         0x43, 0x4B, 0x41, 0x41, 0x41, 0x41, 0x41, 0x41,
         0x41, 0x41, 0x41, 0x41, 0x41, 0x41, 0x41, 0x41,
@@ -129,9 +111,7 @@ static bool netbios_query(const char *ip, char *out_name, size_t out_len)
 
     if (n < 57) return false; // respuesta minima invalida o timeout
 
-    // Estructura de respuesta NBSTAT:
-    // header(12) + name(34) + type/class(4) + ttl(4) + rdlength(2)
-    // + num_names(1) + [16 bytes name + 2 bytes flags] por cada nombre
+    
     int num_names = resp[56];
     if (num_names < 1) return false;
 
@@ -159,9 +139,9 @@ static bool netbios_query(const char *ip, char *out_name, size_t out_len)
     return true;
 }
 
-// -----------------------------------------------------------------------
+
 // Hilo de resolucion: NetBIOS (si LAN) -> DNS inverso (fallback)
-// -----------------------------------------------------------------------
+
 typedef struct {
     sniffer_state_t *state;
     char              ip[INET_ADDRSTRLEN];
@@ -247,7 +227,7 @@ void node_resolve_async(sniffer_state_t *state, const char *ip)
     if (h) CloseHandle(h);
 }
 
-// -----------------------------------------------------------------------
+
 static int cmp_total_bytes(const void *a, const void *b)
 {
     const node_info_t *na = (const node_info_t *)a;

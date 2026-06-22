@@ -1,35 +1,41 @@
 
+
 #include "../include/sniffer.h"
 
-// -----------------------------------------------------------------------
+
+// apply_filter: returns true if the record passes the active filter
+
 bool apply_filter(const packet_record_t *rec, const filter_t *f)
 {
-    // Filtro por nodo seleccionado en Area 4 (solo trafico de/hacia esa IP)
-    if (f->node_filter_active)
-    {
-        bool matches = (strcmp(rec->src_ip, f->node_filter_ip) == 0 ||
-                        strcmp(rec->dst_ip, f->node_filter_ip) == 0);
-        if (!matches) return false;
-    }
-
     if (!f->active)
         return true;
 
+    // Source IP filter
     if (f->src_ip[0] != '\0' && strcmp(f->src_ip, rec->src_ip) != 0)
         return false;
+
+    // Destination IP filter
     if (f->dst_ip[0] != '\0' && strcmp(f->dst_ip, rec->dst_ip) != 0)
         return false;
+
+    // Source port filter (0 = any)
     if (f->src_port != 0 && f->src_port != rec->src_port)
         return false;
+
+    // Destination port filter
     if (f->dst_port != 0 && f->dst_port != rec->dst_port)
         return false;
+
+    // Protocol filter
     if (f->protocol != 0 && f->protocol != rec->protocol)
         return false;
 
     return true;
 }
 
-// -----------------------------------------------------------------------
+
+// ip_to_str: converts a 32-bit network-order IP to dotted-decimal string
+
 static void ip_to_str(uint32_t ip_net, char *buf)
 {
     struct in_addr addr;
@@ -38,7 +44,9 @@ static void ip_to_str(uint32_t ip_net, char *buf)
     buf[INET_ADDRSTRLEN - 1] = '\0';
 }
 
-// -----------------------------------------------------------------------
+
+// packet_handler: called by pcap_loop for every captured frame
+
 void packet_handler(u_char *param,
                     const struct pcap_pkthdr *header,
                     const u_char *pkt_data)
@@ -51,20 +59,25 @@ void packet_handler(u_char *param,
         return;
     }
 
+    // Need at least Ethernet + IP header
     if (header->caplen < (ETHERNET_HDR_LEN + sizeof(ip_header_t)))
         return;
 
+    // Skip Ethernet header
     const u_char *ip_ptr = pkt_data + ETHERNET_HDR_LEN;
 
+    // Check EtherType = IPv4 (0x0800)
     uint16_t ethertype = ntohs(*(uint16_t *)(pkt_data + 12));
     if (ethertype != 0x0800)
         return;
 
     const ip_header_t *ip = (const ip_header_t *)ip_ptr;
     int ip_hdr_len = (ip->ver_ihl & 0x0F) * 4;
+
     if (ip_hdr_len < 20)
         return;
 
+    // Build record
     packet_record_t rec;
     memset(&rec, 0, sizeof(rec));
 
@@ -78,9 +91,11 @@ void packet_handler(u_char *param,
     ip_to_str(ip->src_ip, rec.src_ip);
     ip_to_str(ip->dst_ip, rec.dst_ip);
 
+    // Format timestamp
     struct tm *tm_info = localtime(&rec.timestamp);
     strftime(rec.time_str, sizeof(rec.time_str), "%H:%M:%S", tm_info);
 
+    // Parse transport layer
     const u_char *transport_ptr = ip_ptr + ip_hdr_len;
     int remaining = (int)header->caplen - ETHERNET_HDR_LEN - ip_hdr_len;
 
@@ -119,26 +134,18 @@ void packet_handler(u_char *param,
             }
             break;
 
-        case 2:
-            strncpy(rec.proto_str, "IGMP", sizeof(rec.proto_str) - 1);
-            break;
-
         default:
             snprintf(rec.proto_str, sizeof(rec.proto_str), "%d", ip->protocol);
             break;
     }
 
-    // Alimentar tabla de nodos SIEMPRE (independiente del filtro de
-    // visualizacion), para que Area 4 y Top Talkers vean todo el trafico
-    // real de la red, no solo lo filtrado.
-    node_track(state, rec.src_ip, rec.total_len, true);
-    node_track(state, rec.dst_ip, rec.total_len, false);
-
+    // Apply user filter
     EnterCriticalSection(&state->lock);
     state->total_seen++;
 
     if (apply_filter(&rec, &state->filter))
     {
+        // Raw bytes (capped at MAX_RAW_SHOW)
         rec.raw_len = (int)header->caplen > MAX_RAW_SHOW
                       ? MAX_RAW_SHOW
                       : (int)header->caplen;
@@ -152,10 +159,13 @@ void packet_handler(u_char *param,
     LeaveCriticalSection(&state->lock);
 }
 
-// -----------------------------------------------------------------------
+
+// capture_thread: entry point for the background capture thread
+
 DWORD WINAPI capture_thread(LPVOID arg)
 {
     sniffer_state_t *state = (sniffer_state_t *)arg;
+    // pcap_loop returns when pcap_breakloop is called or on error
     pcap_loop(state->handle, 0, packet_handler, (u_char *)state);
     return 0;
 }

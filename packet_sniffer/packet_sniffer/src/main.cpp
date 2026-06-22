@@ -1,31 +1,17 @@
-/*
- * main.cpp
- * Ejecutar como Administrador.
- */
 
 #include "../include/sniffer.h"
 
-// -----------------------------------------------------------------------
-// Hilo de la UI
-// -----------------------------------------------------------------------
-static DWORD WINAPI ui_thread_proc(LPVOID arg)
-{
-    ui_run((sniffer_state_t *)arg);
-    return 0;
-}
 
-// -----------------------------------------------------------------------
-// Lanza un nuevo hilo de captura, cerrando el anterior si existe.
-// Necesario porque pcap_breakloop deja el handle pcap inutilizable.
-// -----------------------------------------------------------------------
 static HANDLE launch_capture(sniffer_state_t *state, HANDLE prev_thread,
                               const char *dev_name, char *errbuf)
 {
+    // Terminar hilo anterior si sigue vivo
     if (prev_thread != NULL) {
         WaitForSingleObject(prev_thread, 2000);
         CloseHandle(prev_thread);
     }
 
+    // Reabrir el handle pcap (pcap_loop lo deja inutilizable tras breakloop)
     if (state->handle) {
         pcap_close(state->handle);
         state->handle = NULL;
@@ -52,6 +38,15 @@ static HANDLE launch_capture(sniffer_state_t *state, HANDLE prev_thread,
 }
 
 // -----------------------------------------------------------------------
+// Hilo de la UI
+// -----------------------------------------------------------------------
+static DWORD WINAPI ui_thread_proc(LPVOID arg)
+{
+    ui_run((sniffer_state_t *)arg);
+    return 0;
+}
+
+// -----------------------------------------------------------------------
 // main
 // -----------------------------------------------------------------------
 int main(void)
@@ -67,6 +62,7 @@ int main(void)
     WSADATA wsa;
     WSAStartup(MAKEWORD(2, 2), &wsa);
 
+    // Banner
     ui_clear_screen();
     SetConsoleTextAttribute(hOut, FOREGROUND_GREEN | FOREGROUND_INTENSITY);
     printf("\n");
@@ -76,6 +72,7 @@ int main(void)
     printf("  ==========================================\n\n");
     SetConsoleTextAttribute(hOut, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE);
 
+    // Enumerar interfaces
     char errbuf[PCAP_ERRBUF_SIZE];
     pcap_if_t *all_devs = NULL;
 
@@ -97,31 +94,36 @@ int main(void)
     dev_name[sizeof(dev_name) - 1] = '\0';
     pcap_freealldevs(all_devs);
 
+    // Inicializar estado
     sniffer_state_t state;
     memset(&state, 0, sizeof(state));
     InitializeCriticalSection(&state.lock);
-    InitializeCriticalSection(&state.node_lock);
 
+    // Primer lanzamiento
     HANDLE hThread = launch_capture(&state, NULL, dev_name, errbuf);
     if (!hThread) {
         fprintf(stderr, "\n  ERROR abriendo dispositivo: %s\n", errbuf);
         DeleteCriticalSection(&state.lock);
-        DeleteCriticalSection(&state.node_lock);
         WSACleanup();
         return 1;
     }
 
+    // Lanzar UI en hilo separado para que main pueda hacer watchdog
     HANDLE hUI = CreateThread(NULL, 0, ui_thread_proc, &state, 0, NULL);
 
     if (!hUI) {
+        // Fallback: correr UI en main thread sin watchdog
         ui_run(&state);
     } else {
+        // Watchdog loop: mientras la UI siga viva
         while (WaitForSingleObject(hUI, 100) == WAIT_TIMEOUT)
         {
             if (state.want_restart)
             {
+                // UI pidio reanudar: relanzar hilo de captura
                 hThread = launch_capture(&state, hThread, dev_name, errbuf);
                 if (!hThread) {
+                    // No se pudo reabrir - marcar stopped
                     state.running      = false;
                     state.want_restart = false;
                 }
@@ -130,6 +132,7 @@ int main(void)
         CloseHandle(hUI);
     }
 
+    // Cleanup
     state.running = false;
     if (state.handle) pcap_breakloop(state.handle);
     if (hThread) {
@@ -138,7 +141,6 @@ int main(void)
     }
     if (state.handle) { pcap_close(state.handle); state.handle = NULL; }
     DeleteCriticalSection(&state.lock);
-    DeleteCriticalSection(&state.node_lock);
     WSACleanup();
 
     ui_clear_screen();

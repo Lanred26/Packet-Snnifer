@@ -3,7 +3,7 @@ project(packet_sniffer)
 
 set(CMAKE_CXX_STANDARD 11)
 
-
+# Adjust this path if your Npcap SDK is elsewhere
 set(NPCAP_SDK "C:/Uni/redes/npcap-sdk-1.13")
 
 include_directories(
