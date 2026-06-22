@@ -1,0 +1,22 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "build sniffer",
+      "type": "shell",
+      "command": "g++",
+      "args": [
+        "-std=c++11", "-Wall", "-O2",
+        "src/main.cpp", "src/capture.cpp", "src/ui.cpp",
+        "src/export.cpp", "src/device.cpp",
+        "-I", "include",
+        "-I", "C:/Uni/redes/npcap-sdk-1.13/Include",
+        "-L", "C:/Uni/redes/npcap-sdk-1.13/Lib/x64",
+        "-o", "sniffer.exe",
+        "-lwpcap", "-lws2_32", "-lIPHlpApi"
+      ],
+      "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": ["$gcc"]
+    }
+  ]
+}

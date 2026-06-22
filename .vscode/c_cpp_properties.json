@@ -1,0 +1,17 @@
+{
+  "configurations": [
+    {
+      "name": "Win32",
+      "includePath": [
+    "C:\\Uni\\redes\\files\\packet_sniffer\\packet_sniffer\\include",
+    "C:\\Uni\\redes\\npcap-sdk-1.13\\Include"
+],
+      "defines": ["_WIN32", "WIN32"],
+      "compilerPath": "C:\\MinGW\\bin\\g++.exe",
+      "cStandard": "c11",
+      "cppStandard": "c++11",
+      "intelliSenseMode": "windows-gcc-x64"
+    }
+  ],
+  "version": 4
+}
